@@ -16,16 +16,15 @@ import (
 
 type TokenSdk struct {
 	ddxfAPIAddr     string
+	tokenContract   string
 	ddxfContractSdk *ddxf_sdk.DdxfSdk
 }
 
-func NewTokenSdk(ddxfAPIAddr, ontologyApiAddr string, payer *ontology_go_sdk.Account) *TokenSdk {
+func NewTokenSdk(ddxfAPIAddr, ontologyApiAddr, tokenContract string) *TokenSdk {
 	ddxfContractSdk := ddxf_sdk.NewDdxfSdk(ontologyApiAddr)
-	if payer != nil {
-		ddxfContractSdk.SetPayer(payer)
-	}
 	return &TokenSdk{
 		ddxfAPIAddr:     ddxfAPIAddr,
+		tokenContract:   tokenContract,
 		ddxfContractSdk: ddxfContractSdk,
 	}
 }
@@ -35,7 +34,7 @@ func (ts *TokenSdk) SetDDXFAPIAddr(ddxfAPIAddr string) {
 }
 
 func (ts *TokenSdk) VerifyToken(input io.VerifyTokenInput) (err error) {
-	res, err := ts.request("", nil, input, io.VerifyTokenURI)
+	res, err := ts.request(nil, input, io.VerifyTokenURI)
 	if err != nil {
 		return
 	}
@@ -50,8 +49,15 @@ func (ts *TokenSdk) VerifyToken(input io.VerifyTokenInput) (err error) {
 	return fmt.Errorf("failed")
 }
 
-func (ts *TokenSdk) UseToken(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.UseTokenInput, tokenOwner *ontology_go_sdk.Account) (out io.UseTokenOutput, err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.UseTokenURI)
+func (ts *TokenSdk) UseToken(ontIdAcc *ontology_go_sdk.Account, input io.UseTokenInput) (out io.UseTokenOutput, err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	if input.Address == "" {
+		input.Address = ontIdAcc.Address.ToHexString()
+	}
+
+	res, err := ts.request(ontIdAcc, input, io.UseTokenURI)
 	if err != nil {
 		return
 	}
@@ -59,15 +65,18 @@ func (ts *TokenSdk) UseToken(ontId string, ontIdAcc *ontology_go_sdk.Account, in
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, tokenOwner)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (ts *TokenSdk) TransferToken(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.TransferTokenInput, tokenOwner *ontology_go_sdk.Account) (out io.TransferTokenOutput, err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.TransferTokenURI)
+func (ts *TokenSdk) TransferToken(ontIdAcc *ontology_go_sdk.Account, input io.TransferTokenInput) (out io.TransferTokenOutput, err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.TransferTokenURI)
 	if err != nil {
 		return
 	}
@@ -75,12 +84,19 @@ func (ts *TokenSdk) TransferToken(ontId string, ontIdAcc *ontology_go_sdk.Accoun
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, tokenOwner)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) GenerateToken(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.GenerateTokenInput, acc *ontology_go_sdk.Account) (tokenId string, err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.GenerateTokenURI)
+func (ts *TokenSdk) GenerateToken(ontIdAcc *ontology_go_sdk.Account, input io.GenerateTokenInput) (txHash, tokenId string, err error) {
+	if input.Auth == "" {
+		input.Auth = ontIdAcc.Address.ToHexString()
+	}
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+
+	res, err := ts.request(ontIdAcc, input, io.GenerateTokenURI)
 	if err != nil {
 		return
 	}
@@ -89,7 +105,7 @@ func (ts *TokenSdk) GenerateToken(ontId string, ontIdAcc *ontology_go_sdk.Accoun
 	if err != nil {
 		return
 	}
-	txHash, err := ts.handTx(out.Tx, acc)
+	txHash, err = ts.handTx(out.Tx, ontIdAcc)
 	if err != nil {
 		return
 	}
@@ -106,8 +122,11 @@ func (ts *TokenSdk) GenerateToken(ontId string, ontIdAcc *ontology_go_sdk.Accoun
 	return
 }
 
-func (ts *TokenSdk) SetTokenAgent(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.SetTokenAgentInput, acc *ontology_go_sdk.Account) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.SetTokenAgentURI)
+func (ts *TokenSdk) SetTokenAgent(ontIdAcc *ontology_go_sdk.Account, input io.SetTokenAgentInput) (txHash string, err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.SetTokenAgentURI)
 	if err != nil {
 		return
 	}
@@ -116,12 +135,15 @@ func (ts *TokenSdk) SetTokenAgent(ontId string, ontIdAcc *ontology_go_sdk.Accoun
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	txHash, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) AddTokenAgent(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.AddTokenAgentInput, acc *ontology_go_sdk.Account) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.AddTokenAgentURI)
+func (ts *TokenSdk) AddTokenAgent(ontIdAcc *ontology_go_sdk.Account, input io.AddTokenAgentInput) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.AddTokenAgentURI)
 	if err != nil {
 		return
 	}
@@ -130,12 +152,15 @@ func (ts *TokenSdk) AddTokenAgent(ontId string, ontIdAcc *ontology_go_sdk.Accoun
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) RemoveTokenAgent(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.AddTokenAgentInput, acc *ontology_go_sdk.Account) (err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.RemoveTokenAgentURI)
+func (ts *TokenSdk) RemoveTokenAgent(ontIdAcc *ontology_go_sdk.Account, input io.RemoveTokenAgentInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.RemoveTokenAgentURI)
 	if err != nil {
 		return
 	}
@@ -144,12 +169,15 @@ func (ts *TokenSdk) RemoveTokenAgent(ontId string, ontIdAcc *ontology_go_sdk.Acc
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) GetToken(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.GetTokenInput, acc *ontology_go_sdk.Account) (out io.GetTokenOutput, err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.GetTokenURI)
+func (ts *TokenSdk) GetToken(ontIdAcc *ontology_go_sdk.Account, input io.GetTokenInput) (out io.GetTokenOutput, err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.GetTokenURI)
 	if err != nil {
 		return
 	}
@@ -160,17 +188,26 @@ func (ts *TokenSdk) GetToken(ontId string, ontIdAcc *ontology_go_sdk.Account, in
 	return
 }
 
-func (ts *TokenSdk) CreateTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.CreateTokenTemplateInput, acc *ontology_go_sdk.Account) (tokenTemplateId string, err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.CreateTokenTemplateURI)
+func (ts *TokenSdk) CreateTokenTemplate(ontIdAcc *ontology_go_sdk.Account, input io.CreateTokenTemplateInput) (tokenTemplateId string, err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	if input.Address == "" {
+		input.Address = ontIdAcc.Address.ToHexString()
+	}
+	if input.Template.Endpoint == "" {
+		input.Template.Endpoint = ts.ddxfAPIAddr
+	}
+	res, err := ts.request(ontIdAcc, input, io.CreateTokenTemplateURI)
 	if err != nil {
 		return
 	}
-	var out io.RemoveTokenAgentOutput
+	var out io.CreateTokenTemplateOutput
 	err = json.Unmarshal(res, &out)
 	if err != nil {
 		return
 	}
-	txHash, err := ts.handTx(out.Tx, acc)
+	txHash, err := ts.handTx(out.Tx, ontIdAcc)
 	if err != nil {
 		return
 	}
@@ -184,8 +221,11 @@ func (ts *TokenSdk) CreateTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.
 	return
 }
 
-func (ts *TokenSdk) UpdateTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.UpdateTokenTemplateInput, acc *ontology_go_sdk.Account) (err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.UpdateTokenTemplateURI)
+func (ts *TokenSdk) UpdateTokenTemplate(ontIdAcc *ontology_go_sdk.Account, input io.UpdateTokenTemplateInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.UpdateTokenTemplateURI)
 	if err != nil {
 		return
 	}
@@ -194,11 +234,14 @@ func (ts *TokenSdk) UpdateTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
-func (ts *TokenSdk) RemoveTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.RemoveTokenTemplateAuthInput, acc *ontology_go_sdk.Account) (err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.RemoveTokenTemplateURI)
+func (ts *TokenSdk) RemoveTokenTemplate(ontIdAcc *ontology_go_sdk.Account, input io.RemoveTokenTemplateAuthInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.RemoveTokenTemplateURI)
 	if err != nil {
 		return
 	}
@@ -207,12 +250,15 @@ func (ts *TokenSdk) RemoveTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) GetTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.GetTokenTemplateInput, acc *ontology_go_sdk.Account) (out io.GetTokenTemplateOutput, err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.GetTokenTemplateURI)
+func (ts *TokenSdk) GetTokenTemplate(ontIdAcc *ontology_go_sdk.Account, input io.GetTokenTemplateInput) (out io.GetTokenTemplateOutput, err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.GetTokenTemplateURI)
 	if err != nil {
 		return
 	}
@@ -223,8 +269,11 @@ func (ts *TokenSdk) GetTokenTemplate(ontId string, ontIdAcc *ontology_go_sdk.Acc
 	return
 }
 
-func (ts *TokenSdk) SetTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.SetTokenTemplateAuthInput, acc *ontology_go_sdk.Account) (err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.SetTokenTemplateAuthURI)
+func (ts *TokenSdk) SetTokenTemplateAuth(ontIdAcc *ontology_go_sdk.Account, input io.SetTokenTemplateAuthInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.SetTokenTemplateAuthURI)
 	if err != nil {
 		return
 	}
@@ -233,12 +282,15 @@ func (ts *TokenSdk) SetTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_sdk
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) AddTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.AddTokenTemplateAuthInput, acc *ontology_go_sdk.Account) (err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.AddTokenTemplateAuthURI)
+func (ts *TokenSdk) AddTokenTemplateAuth(ontIdAcc *ontology_go_sdk.Account, input io.AddTokenTemplateAuthInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.AddTokenTemplateAuthURI)
 	if err != nil {
 		return
 	}
@@ -247,12 +299,15 @@ func (ts *TokenSdk) AddTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_sdk
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) RemoveTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.RemoveTokenTemplateAuthInput, acc *ontology_go_sdk.Account) (err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.RemoveTokenTemplateAuthURI)
+func (ts *TokenSdk) RemoveTokenTemplateAuth(ontIdAcc *ontology_go_sdk.Account, input io.RemoveTokenTemplateAuthInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.RemoveTokenTemplateAuthURI)
 	if err != nil {
 		return
 	}
@@ -261,12 +316,15 @@ func (ts *TokenSdk) RemoveTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (ts *TokenSdk) ClearTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_sdk.Account, input io.ClearTokenTemplateAuthInput, acc *ontology_go_sdk.Account) (err error) {
-	res, err := ts.request(ontId, ontIdAcc, input, io.ClearTokenTemplateAuthURI)
+func (ts *TokenSdk) ClearTokenTemplateAuth(ontIdAcc *ontology_go_sdk.Account, input io.ClearTokenTemplateAuthInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.ClearTokenTemplateAuthURI)
 	if err != nil {
 		return
 	}
@@ -275,25 +333,44 @@ func (ts *TokenSdk) ClearTokenTemplateAuth(ontId string, ontIdAcc *ontology_go_s
 	if err != nil {
 		return
 	}
-	_, err = ts.handTx(out.Tx, acc)
+	_, err = ts.handTx(out.Tx, ontIdAcc)
 	return
 }
 
-func (m *TokenSdk) request(ontId string, ontIdAcc *ontology_go_sdk.Account, input interface{}, uri string) (res []byte, err error) {
+func (ts *TokenSdk) SetMPContract(ontIdAcc *ontology_go_sdk.Account, input io.SetMPContractInput) (err error) {
+	if input.TokenContract == "" {
+		input.TokenContract = ts.tokenContract
+	}
+	res, err := ts.request(ontIdAcc, input, io.SetMPContractURI)
+	if err != nil {
+		return
+	}
+	var out io.SetMPContractOutput
+	err = json.Unmarshal(res, &out)
+	if err != nil {
+		return
+	}
+	_, err = ts.handTx(out.Tx, ontIdAcc)
+	return
+}
+
+func (m *TokenSdk) request(ontIDAcc *ontology_go_sdk.Account, input interface{}, uri string) (res []byte, err error) {
+
 	bs, err := json.Marshal(input)
 	if err != nil {
 		return
 	}
 	var header map[string]string
-	if ontIdAcc != nil {
-		pk := keypair.SerializePublicKey(ontIdAcc.GetPublicKey())
+	if ontIDAcc != nil {
+		ontID := "did:ont:" + ontIDAcc.Address.ToBase58()
+		pk := keypair.SerializePublicKey(ontIDAcc.GetPublicKey())
 		var sig []byte
-		sig, err = ontIdAcc.Sign(bs)
+		sig, err = ontIDAcc.Sign(bs)
 		if err != nil {
 			return
 		}
 		header = map[string]string{
-			"DDXF_ONTID": ontId,
+			"DDXF_ONTID": ontID,
 			"DDXF_PK":    hex.EncodeToString(pk),
 			"DDXF_SIGN":  hex.EncodeToString(sig),
 		}

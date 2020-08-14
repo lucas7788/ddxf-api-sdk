@@ -1,6 +1,8 @@
 package token
 
 const (
+	// SetMPContractURI ...
+	SetMPContractURI = "/ddxf/dtoken/set_mp"
 	// VerifyTokenURI ...
 	VerifyTokenURI = "/ddxf/dtoken/verify"
 
