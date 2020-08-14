@@ -21,7 +21,9 @@ type TokenSdk struct {
 
 func NewTokenSdk(ddxfAPIAddr, ontologyApiAddr string, payer *ontology_go_sdk.Account) *TokenSdk {
 	ddxfContractSdk := ddxf_sdk.NewDdxfSdk(ontologyApiAddr)
-	ddxfContractSdk.SetPayer(payer)
+	if payer != nil {
+		ddxfContractSdk.SetPayer(payer)
+	}
 	return &TokenSdk{
 		ddxfAPIAddr:     ddxfAPIAddr,
 		ddxfContractSdk: ddxfContractSdk,
